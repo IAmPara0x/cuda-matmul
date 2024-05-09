@@ -36,5 +36,6 @@ Matrix readMat(std::string filename);
 Matrix alloc_mat(size_t rows, size_t cols);
 void free_mat(Matrix mat);
 void print_mat(Matrix mat);
+void transpose(Matrix *mat);
 
 #endif

@@ -1,1 +1,4 @@
 prefetch.*
+./*.txt
+main
+.direnv/

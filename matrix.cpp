@@ -76,13 +76,11 @@ Matrix alloc_mat(size_t rows, size_t cols) {
     matrix.cols = cols;
     matrix.size = rows * cols * sizeof(float);
     matrix.value = (float*)malloc(rows * cols * sizeof(float));
-
     return matrix;
 }
 
 void free_mat(Matrix matrix) {
     free(matrix.value); // Free the array of pointers
-
 }
 
 void print_mat(Matrix matrix) {
@@ -94,3 +92,15 @@ void print_mat(Matrix matrix) {
         std::cout << "\n";
     }
 }
+
+void transpose(Matrix *matrix) {
+
+    float *value = (float*)malloc(matrix->rows * matrix->cols * sizeof(float));
+
+    for (int i = 0; i < matrix->rows; i++)
+        for (int j = 0; j < matrix->cols; j++)
+            value[j * matrix->cols + i] = matrix->value[i * matrix->cols + j];
+
+    free(matrix->value);
+    matrix->value = value;
+};
