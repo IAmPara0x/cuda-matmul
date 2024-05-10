@@ -1,106 +1,105 @@
-#include <cuda_runtime.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <vector>
 #include <bits/stdc++.h>
 #include <stdio.h>
-#include <cstdlib>
+#include <cuda_runtime.h>
+#include <functional>
 #include "matrix.h"
 
 using namespace std;
 
-Matrix readMat(string filename) {
-
-    ifstream file(filename); 
-    string line;
-
-    vector<string> tokens;
-    string token;
-    char delimiter = ',';
-
-    bool has_initialized_matrix = false;
-
-    size_t rows, cols;
-
-    Matrix matrix;
-
-    if (!file) {
-        cerr << "Unable to open file\n";
-        return NULL_MATRIX;
-    }
-
-    file.unsetf(ios_base::skipws);
-    rows = count( istream_iterator<char>(file), istream_iterator<char>(), '\n');
-    file.setf(ios_base::skipws);
-
-    // Reset the file pointer to the beginning of the file
-    file.clear(); // Clears any error flags that might be set
-    file.seekg(0, std::ios::beg); // Move the file pointer to the beginning
-
-
-    size_t cur_row = 0;
-
-    while (getline(file, line)) {
-
-        istringstream tokenStream(line);
-
-        while (getline(tokenStream, token, delimiter))
-            tokens.push_back(token);
-
-        if (!has_initialized_matrix) {
-
-            cols = tokens.size();
-            matrix = alloc_mat(rows, cols);
-            has_initialized_matrix = true;
-        }
-
-        for (int j = 0; j < cols; j++)
-            matrix.value[cur_row * cols + j] = stof(tokens[j]);
-
-        cur_row += 1;
-        tokens.clear();
-    }
-
-    file.close(); // Close the file
-
-    return matrix;
-}
-
-Matrix alloc_mat(size_t rows, size_t cols) {
-
-    Matrix matrix;
-
-    matrix.rows = rows;
-    matrix.cols = cols;
-    matrix.size = rows * cols * sizeof(float);
-    matrix.value = (float*)malloc(rows * cols * sizeof(float));
-    return matrix;
-}
-
-void free_mat(Matrix matrix) {
-    free(matrix.value); // Free the array of pointers
-}
-
-void print_mat(Matrix matrix) {
-
-    for(int i = 0; i < matrix.rows; i++) {
-        for(int j = 0; j < matrix.cols; j++) {
-            printf("%8.3f ", matrix.value[i * matrix.cols + j]);
-        }
+void print_mat(float *matrix, size_t N) {
+    for(int i = 0; i < N; i++) {
+        for(int j = 0; j < N; j++)
+            printf("%8.3f ", matrix[i * N + j]);
         std::cout << "\n";
     }
 }
 
-void transpose(Matrix *matrix) {
+void transpose(float *matrix, size_t N) {
 
-    float *value = (float*)malloc(matrix->rows * matrix->cols * sizeof(float));
+   float tmp;
 
-    for (int i = 0; i < matrix->rows; i++)
-        for (int j = 0; j < matrix->cols; j++)
-            value[j * matrix->cols + i] = matrix->value[i * matrix->cols + j];
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < i; j++) {
+            tmp = matrix[i * N + j];
+            matrix[i * N + j] = matrix[j*N + i];
+            matrix[j*N + i] = tmp;
+        }
+};
 
-    free(matrix->value);
-    matrix->value = value;
+// TODO: allow use of negative value of high
+float* random_mat(size_t N, int hi) {
+
+    srand(time(NULL));
+
+    assert (hi > 0 && "only positive values are allowed!");
+
+    float *mat = init_mat(N);
+    float r;
+
+    for (int i = 0; i < N*N; ++i) {
+        r = ((float) rand() / (RAND_MAX)) + 1;
+        mat[i] = (rand() % hi) * r;
+    }
+
+    return mat;
+}
+
+float *init_mat(size_t N) {
+    float *mat = (float *)malloc(sizeof(float) * N * N);
+
+    for (int i = 0; i < N*N; ++i)
+        mat[i] = 0;
+    return mat;
+}
+
+void sgemm_cpu(float *A, float *B, float *C, size_t N) {
+
+    for (int row = 0; row < N; row++)
+        for (int col = 0; col < N; col++)
+        {
+            float sum = 0.0;
+            for (int k = 0; k < N; k++)
+                sum += A[row * N + k] * B[k * N + col];
+            C[row * N + col] = sum;
+        }
+
+}
+
+bool same_matrix(float *A, float *B, size_t N, float tolerance) {
+
+    for (int i = 0; i < N*N; i++)
+        if (fabs(A[i] - B[i]) > tolerance)
+        {
+            printf("Mismatch at (%zu,%zu), %f != %f\n", i / N, i % N, A[i], B[i]);
+            return false;
+        }
+    return true;
+}
+
+
+float measure_gflops(std::function<void()> MatMul_kernel, size_t N, size_t iterations) {
+
+    float elapsed_time, total_elapsed_time=0;
+    cudaEvent_t beg, end;
+    cudaEventCreate(&beg);
+    cudaEventCreate(&end);
+
+    size_t flops = 2 * N * N * N;
+
+    for (int i = 0; i < iterations; ++i)
+    { 
+        cudaEventRecord(beg);
+        MatMul_kernel();
+        cudaEventRecord(end);
+
+        cudaEventSynchronize(beg);
+        cudaEventSynchronize(end);
+        cudaEventElapsedTime(&elapsed_time, beg, end);
+        elapsed_time /= 1000; // Convert to seconds
+        total_elapsed_time += elapsed_time;
+    }
+
+
+
+    return (iterations * flops * 1e-9) / total_elapsed_time;
 };

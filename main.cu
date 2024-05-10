@@ -7,43 +7,13 @@
 
 using namespace std;
 
+constexpr int N=1024;
+constexpr size_t iterations=1;
 
-void square_matmul(float *A, float *B, float *C, size_t N) {
+// #define VERIFY
+// #define CUBLAS_BENCH 1
 
-    // NOTE:: START TIMER
-    auto start = std::chrono::high_resolution_clock::now();
-
-    dim3 threadsPerBlock(THREADS, THREADS);
-    dim3 blocks((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                   (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
-    MatMulKernel<<<blocks, threadsPerBlock>>>(A, B, C, N);
-    cudaDeviceSynchronize();
-
-    // NOTE:: END TIMER
-    auto end = std::chrono::high_resolution_clock::now();
-
-    std::chrono::duration<double> duration = end - start;
-    std::cout << "Execution time: " << duration.count() << " seconds" << std::endl;
-}
-
-void cublas_matmul(cublasHandle_t handle, float *A, float *B, float *C, size_t N) {
-
-    // Initialize cuBLAS context
-
-    // Parameters for matrix multiplication
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
-
-    // NOTE:: START TIMER
-
-    auto start = std::chrono::high_resolution_clock::now();
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, N, N, &alpha, A, N, B, N, &beta, C, N);
-
-    // NOTE:: END TIMER
-    auto end = std::chrono::high_resolution_clock::now();
-
-}
-
+void getDeviceInfo();
 
 int main(void) {
 
@@ -52,49 +22,66 @@ int main(void) {
     cublasHandle_t handle;
     cublasCreate(&handle);
 
-    Matrix A = readMat("A.txt");
-    Matrix B = readMat("B.txt");
-    Matrix C = readMat("C.txt");
-    Matrix result = alloc_mat(A.rows, A.cols);
+    float *hA = random_mat(N, 5), *hB = random_mat(N, 5), *hC = init_mat(N), *cRef = init_mat(N);
+    size_t sizeA=matrix_size(hA, N),sizeB=matrix_size(hB, N),sizeC=matrix_size(hC, N);
+    float *dA = nullptr, *dB = nullptr, *dC = nullptr;
+    float gflops;
 
-    transpose(&B);
-    
-    cout << "Matrix Size: " << A.rows << "x" << A.cols << endl;
+    cudaMalloc((void **)&dA, sizeA);
+    cudaMalloc((void **)&dB, sizeB);
+    cudaMalloc((void **)&dC, sizeC);
 
-    float *cuMat1 = nullptr, *cuMat2 = nullptr, *cuMatResult = nullptr;
 
-    cudaMalloc((void **)&cuMat1, A.size);
-    cudaMalloc((void **)&cuMat2, B.size);
-    cudaMalloc((void **)&cuMatResult, A.size);
 
-    // cuMemcpy()
-    cudaMemcpy(cuMat1, A.value, A.size, cudaMemcpyHostToDevice);
-    cudaMemcpy(cuMat2, B.value, A.size, cudaMemcpyHostToDevice);
+#ifdef CUBLAS_BENCH
 
-    square_matmul(cuMat1, cuMat2, cuMatResult, A.rows);
-    // cublas_matmul(handle, cuMat1, cuMat2, cuMatResult, A.rows);
+    cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
+    cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
 
-    cudaMemcpy(result.value, cuMatResult, A.size, cudaMemcpyDeviceToHost);
+    gflops =  measure_gflops([&handle, dA, dB, dC]() { cuBlas_MatMul(handle,dA,dB,dC, N); }, N, iterations);
+    printf("cuBLAS performance: (%f) GFLOPS. size: %d\n", gflops, N);
 
-    // cudaFree
-    cudaFree(cuMat1);
-    cudaFree(cuMat2);
-    cudaFree(cuMatResult);
+#else
+
+    cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
+    transpose(hB, N);
+    cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
+
+    dim3 threadsPerBlock(THREADS, THREADS);
+    dim3 blocks((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                   (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    gflops =  measure_gflops( [&handle, dA, dB, dC, threadsPerBlock, blocks]() { MatMulKernelStrided<<<blocks, threadsPerBlock>>>(dA,dB,dC, N); }, N, iterations);
+
+    printf("our performance: (%f) GFLOPS. size: %d\n", gflops, N);
+
+#endif
+
+    cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
+
+#ifdef VERIFY
+
+    transpose(hB, N);
+    sgemm_cpu(hA,hB, cRef, N);
+
+    if (same_matrix(hC,cRef, N, 1e-1))
+        cout << "Verified!" << endl;
+    else
+        cout << "Verification Failed!" << endl;
+#endif
+
+    // cuda free, matrices:
+    cudaFree(dA);
+    cudaFree(dB);
+    cudaFree(dC);
     cublasDestroy(handle);
 
-    if (result == C) 
-        cout << "Test Passed!" << endl;
-    else
-        cout << "Test Failed!" << endl;
-
-
-    // host free
-    free_mat(A);
-    free_mat(B);
-    free_mat(C);
-    free_mat(result);
-    return 0;
-}
+    // free matrices: 
+    free(hA);
+    free(hB);
+    free(hC);
+    free(cRef);
+};
 
 
 void getDeviceInfo() {

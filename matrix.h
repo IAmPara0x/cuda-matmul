@@ -2,40 +2,21 @@
 
 #define MATRIX_H
 
-#include <cstddef>
-#include <string>
+#include <iostream>
+#include <functional>
 
-struct Matrix {
-    size_t rows;
-    size_t cols;
-    float *value;
-    size_t size;
+template <typename T>
+inline size_t matrix_size(T* mat, size_t N) {
+    return N * N * sizeof(T);
+}
 
-    // Overload the '==' operator as a member function
-    bool operator==(const Matrix &other) const {
+void print_mat(float *matrix, size_t N);
+float* random_mat(size_t N, int hi);
+void transpose(float *matrix, size_t N);
+float* init_mat(size_t N);
+void sgemm_cpu(float *A, float *B, float *C, size_t N);
+bool same_matrix(float *A, float *B, size_t N, float tolerance);
 
-        if (other.rows != rows || other.cols != cols) return false;
-
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                if (std::abs(value[i*rows + j] - other.value[i*rows + j]) > 0.1 ) 
-                {
-                    printf("%f != %f, (%d, %d), diff=%f\n", value[i*rows + j] , other.value[i*rows + j] , i,j, value[i*rows + j] - other.value[i*rows + j] );
-                    return false;
-                }
-
-        return true;
-    }
-};
-
-#define NULL_MATRIX Matrix {0, 0, NULL}
-
-void getDeviceInfo();
-
-Matrix readMat(std::string filename);
-Matrix alloc_mat(size_t rows, size_t cols);
-void free_mat(Matrix mat);
-void print_mat(Matrix mat);
-void transpose(Matrix *mat);
+float measure_gflops(std::function<void()> MatMul_kernel, size_t N, size_t iterations);
 
 #endif
