@@ -1,99 +1,121 @@
-#include <cuda_runtime.h>
-#include <iostream>
+#include "matmul.h"
+#include "matrix.h"
+#include "runner.h"
 #include <chrono>
 #include <cublas_v2.h>
-#include "matrix.h"
-#include "matmul.h"
+#include <cuda_runtime.h>
+#include <iostream>
+#include <string>
 
 using namespace std;
 
-constexpr int N=1024;
-constexpr size_t iterations=1;
-
-// #define VERIFY
-// #define CUBLAS_BENCH 1
+constexpr int N = 1024;
+constexpr size_t iterations = 1;
 
 void getDeviceInfo();
-
-int main(void) {
-
-    getDeviceInfo();
-
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-
-    float *hA = random_mat(N, 5), *hB = random_mat(N, 5), *hC = init_mat(N), *cRef = init_mat(N);
-    size_t sizeA=matrix_size(hA, N),sizeB=matrix_size(hB, N),sizeC=matrix_size(hC, N);
-    float *dA = nullptr, *dB = nullptr, *dC = nullptr;
-    float gflops;
-
-    cudaMalloc((void **)&dA, sizeA);
-    cudaMalloc((void **)&dB, sizeB);
-    cudaMalloc((void **)&dC, sizeC);
+MatMulKernel getKernelName(int argc, char **argv);
 
 
+int main(int argc, char **argv) {
 
-#ifdef CUBLAS_BENCH
+  MatMulKernel kernel = getKernelName(argc, argv);
 
-    cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
-    cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
+  getDeviceInfo();
 
-    gflops =  measure_gflops([&handle, dA, dB, dC]() { cuBlas_MatMul(handle,dA,dB,dC, N); }, N, iterations);
-    printf("cuBLAS performance: (%f) GFLOPS. size: %d\n", gflops, N);
+  cublasHandle_t handle;
+  cublasCreate(&handle);
 
-#else
+  float *hA = random_mat(N, 5), *hB = random_mat(N, 5), *hC = init_mat(N),
+        *cRef = init_mat(N);
+  size_t sizeA = matrix_size(hA, N), sizeB = matrix_size(hB, N),
+         sizeC = matrix_size(hC, N);
+  float *dA = nullptr, *dB = nullptr, *dC = nullptr;
+  float gflops;
 
-    cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
-    transpose(hB, N);
-    cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
+  cudaMalloc((void **)&dA, sizeA);
+  cudaMalloc((void **)&dB, sizeB);
+  cudaMalloc((void **)&dC, sizeC);
 
-    dim3 threadsPerBlock(THREADS, THREADS);
-    dim3 blocks((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                   (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+  cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
+  cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
 
-    gflops =  measure_gflops( [&handle, dA, dB, dC, threadsPerBlock, blocks]() { MatMulKernelStrided<<<blocks, threadsPerBlock>>>(dA,dB,dC, N); }, N, iterations);
+  auto func = runner(handle, kernel, {hA, hB, hC}, {dA, dB, dC}, N);
 
-    printf("our performance: (%f) GFLOPS. size: %d\n", gflops, N);
+  gflops = measure_gflops(func, N, iterations); //
 
-#endif
+  printf("%s performance: (%f) GFLOPS. size: %d\n",
+         matmulKernelToString(kernel).c_str(), gflops, N);
 
-    cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
+  cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
 
-#ifdef VERIFY
+  if (argc == 3 && strcmp(argv[2], "-verify") == 0) {
+    sgemm_cpu(hA, hB, cRef, N);
 
-    transpose(hB, N);
-    sgemm_cpu(hA,hB, cRef, N);
-
-    if (same_matrix(hC,cRef, N, 1e-1))
-        cout << "Verified!" << endl;
+    if (same_matrix(hC, cRef, N, 1e-1))
+      cout << "Verified!" << endl;
     else
-        cout << "Verification Failed!" << endl;
-#endif
+      cout << "Verification Failed!" << endl;
+  }
 
-    // cuda free, matrices:
-    cudaFree(dA);
-    cudaFree(dB);
-    cudaFree(dC);
-    cublasDestroy(handle);
+  // cuda free, matrices:
+  cudaFree(dA);
+  cudaFree(dB);
+  cudaFree(dC);
+  cublasDestroy(handle);
 
-    // free matrices: 
-    free(hA);
-    free(hB);
-    free(hC);
-    free(cRef);
+  // free matrices:
+  free(hA);
+  free(hB);
+  free(hC);
+  free(cRef);
 };
 
+MatMulKernel getKernelName(int argc, char **argv) {
+
+  if (argc == 1)
+  {
+    printf("USAGE: main <KERNEL_NAME> -verify\n");
+    exit(-1);
+  }
+
+  string kernel_name = argv[1];
+
+  MatMulKernel kernel;
+
+  if (kernel_name == "CuBLAS")
+    kernel = MatMulKernelCuBLAS;
+  else if (kernel_name == "Naive")
+    kernel = MatMulKernelNaive;
+  else if (kernel_name == "RowMajor")
+    kernel = MatMulKernelRowMajor;
+  else if (kernel_name == "Strided")
+    kernel = MatMulKernelStrided;
+  else {
+    printf("Invalid Kernel. Possible Kernel:\n"
+           "\t 1. CuBLAS\n"
+           "\t 2. Naive\n"
+           "\t 3. RowMajor\n"
+           "\t 4. Strided\n");
+    exit(-1);
+  }
+
+  return kernel;
+
+}
 
 void getDeviceInfo() {
-    int device;
-    cudaGetDevice(&device);
-    cudaDeviceProp props;
-    cudaGetDeviceProperties(&props, device);
-    
-    std::cout << "Device Name: " << props.name << std::endl;
-    std::cout << "Number of SMs: " << props.multiProcessorCount << std::endl;
-    std::cout << "Max Threads per SM: " << props.maxThreadsPerMultiProcessor << std::endl;
-    std::cout << "Max Threads per Block: " << props.maxThreadsPerBlock << std::endl;
-    std::cout << "Shared Memory per Block: " << props.sharedMemPerBlock << std::endl;
-    return;
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp props;
+  cudaGetDeviceProperties(&props, device);
+
+  std::cout << "Device Name: " << props.name << std::endl;
+  std::cout << "Number of SMs: " << props.multiProcessorCount << std::endl;
+  std::cout << "Max Threads per SM: " << props.maxThreadsPerMultiProcessor
+            << std::endl;
+  std::cout << "Max Threads per Block: " << props.maxThreadsPerBlock
+            << std::endl;
+  std::cout << "Shared Memory per Block: " << props.sharedMemPerBlock
+            << std::endl;
+  return;
 };

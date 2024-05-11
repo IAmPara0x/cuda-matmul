@@ -14,25 +14,8 @@
     pkgs = import nixpkgs { inherit system; config = { allowUnfree = true; }; };
     cudatoolkit = pkgs.cudaPackagesGoogle.cudatoolkit;
 
-    # buildScript = 
-    #
-    # /* bash */
-    # ''
-    #
-    #   set -xe
-    #   outfile=$(basename "$1" .cu)
-    #   nvcc ./matrix.cpp "$1" -o "$outfile" -I ${cudatoolkit}/include -ldir ${cudatoolkit}/nvvm/libdevice/ -L ${cudatoolkit}/lib -L ${cudatoolkit.lib}/lib  --dont-use-profile -G -rdc=true -lcudadevrt
-    #   patchelf --set-rpath "/run/opengl-driver/lib:"$(patchelf --print-rpath "$outfile") "$outfile"
-    # '';
-    #
-    # cudaCompile = pkgs.writeScriptBin "cudaCompile" 
-    # ''
-    #   #!${pkgs.stdenv.shell}
-    #   ${buildScript}
-    # '';
-    #
     shell = pkgs.mkShell.override { stdenv = pkgs.gcc11Stdenv; } {
-      packages = with pkgs; [gcc11 gcc11Stdenv cudatoolkit hyperfine];
+      packages = with pkgs; [gcc11 gcc11Stdenv cudatoolkit hyperfine valgrind];
       CUDA_TOOLKIT = "${cudatoolkit}";
       CUDA_TOOLKIT_LIB = "${cudatoolkit.lib}";
     };
