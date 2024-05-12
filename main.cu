@@ -1,6 +1,6 @@
-#include "matmul.h"
-#include "matrix.h"
-#include "runner.h"
+#include "./src/matmul.h"
+#include "./src/matrix.h"
+#include "./src/runner.h"
 #include <chrono>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -10,7 +10,7 @@
 using namespace std;
 
 constexpr int N = 1024;
-constexpr size_t iterations = 1;
+constexpr size_t iterations = 100;
 
 void getDeviceInfo();
 MatMulKernel getKernelName(int argc, char **argv);

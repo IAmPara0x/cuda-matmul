@@ -2,3 +2,4 @@ prefetch.*
 ./*.txt
 main
 .direnv/
+*.o
