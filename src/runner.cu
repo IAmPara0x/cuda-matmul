@@ -39,29 +39,10 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     });
   }
 
-
-  transpose(host.hB, N);
-
   cudaMemcpy(device.dB, host.hB, matrix_size(host.hB, N),
              cudaMemcpyHostToDevice);
 
   std::function<void()> func;
-
-
-  if (kernel == MatMulKernelRowMajor)
-    func = ([handle, device, N, blockDim, gridDim]() {
-      MatMulKernel_RowMajor<<<gridDim, blockDim>>>(device.dA, device.dB,
-                                                         device.dC, N);
-      cudaCheck(cudaDeviceSynchronize());
-    });
-
-
-  if (kernel == MatMulKernelFMA)
-    func = ([handle, device, N, blockDim, gridDim]() {
-      MatMulKernel_FMA<<<gridDim, blockDim>>>(device.dA, device.dB,
-                                                         device.dC, N);
-      cudaCheck(cudaDeviceSynchronize());
-    });
 
   if (kernel == MatMulKernelStrided)
     func = ([handle, device, N, blockDim, gridDim]() {
@@ -70,7 +51,6 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
       cudaCheck(cudaDeviceSynchronize());
     });
 
-  transpose(host.hB, N);
   return func;
 }
 
@@ -81,10 +61,6 @@ std::string matmulKernelToString(MatMulKernel kernel) {
     return "MatMulKernelCuBLAS";
   case MatMulKernel::MatMulKernelNaive:
     return "MatMulKernelNaive";
-  case MatMulKernel::MatMulKernelFMA:
-    return "MatMulKernelFMA";
-  case MatMulKernel::MatMulKernelRowMajor:
-    return "MatMulKernelRowMajor";
   case MatMulKernel::MatMulKernelStrided:
     return "MatMulKernelStrided";
   default:

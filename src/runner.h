@@ -10,9 +10,7 @@
 typedef enum MatMulKernel {
   MatMulKernelCuBLAS = 0,
   MatMulKernelNaive = 1,
-  MatMulKernelRowMajor = 2,
-  MatMulKernelFMA = 3,
-  MatMulKernelStrided = 4,
+  MatMulKernelStrided = 2,
 } MatMulKernel;
 
 

@@ -8,7 +8,7 @@
 
 using namespace std;
 
-constexpr int N = 1 << 10;
+constexpr int N = 1 << 12;
 constexpr size_t iterations = 1;
 
 void getDeviceInfo();
@@ -24,15 +24,16 @@ int main(int argc, char **argv) {
   cublasCreate(&handle);
 
   float *hA = random_mat(N, 5), *hB = random_mat(N, 5), *hC = init_mat(N),
-        *cRef = init_mat(N);
+        *hCRef = init_mat(N);
   size_t sizeA = matrix_size(hA, N), sizeB = matrix_size(hB, N),
          sizeC = matrix_size(hC, N);
-  float *dA = nullptr, *dB = nullptr, *dC = nullptr;
+  float *dA = nullptr, *dB = nullptr, *dC = nullptr, *dCRef = nullptr;
   float gflops;
 
   cudaMalloc((void **)&dA, sizeA);
   cudaMalloc((void **)&dB, sizeB);
   cudaMalloc((void **)&dC, sizeC);
+  cudaMalloc((void **)&dCRef, sizeC);
 
   cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
   cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
@@ -47,9 +48,12 @@ int main(int argc, char **argv) {
   cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
 
   if (argc == 3 && strcmp(argv[2], "-verify") == 0) {
-    sgemm_cpu(hA, hB, cRef, N);
 
-    if (same_matrix(hC, cRef, N, 1e-1))
+    cuBlas_MatMul(handle,dA, dB, dCRef, N);
+    cudaMemcpy(hCRef, dCRef, sizeC, cudaMemcpyDeviceToHost);
+
+    // XXX: This verification unstable?
+    if (same_matrix(hC, hCRef, N, 1e-1))
       cout << "Verified!" << endl;
     else
       cout << "Verification Failed!" << endl;
@@ -59,13 +63,14 @@ int main(int argc, char **argv) {
   cudaFree(dA);
   cudaFree(dB);
   cudaFree(dC);
+  cudaFree(dCRef);
   cublasDestroy(handle);
 
   // free matrices:
   free(hA);
   free(hB);
   free(hC);
-  free(cRef);
+  free(hCRef);
 };
 
 MatMulKernel getKernelName(int argc, char **argv) {
@@ -84,19 +89,13 @@ MatMulKernel getKernelName(int argc, char **argv) {
     kernel = MatMulKernelCuBLAS;
   else if (kernel_name == "Naive")
     kernel = MatMulKernelNaive;
-  else if (kernel_name == "FMA")
-    kernel = MatMulKernelFMA;
-  else if (kernel_name == "RowMajor")
-    kernel = MatMulKernelRowMajor;
   else if (kernel_name == "Strided")
     kernel = MatMulKernelStrided;
   else {
     printf("Invalid Kernel. Possible Kernel:\n"
            "\t 0. CuBLAS\n"
            "\t 1. Naive\n"
-           "\t 2. RowMajor\n"
-           "\t 3. FMA\n"
-           "\t 4. Strided\n"
+           "\t 2. Strided\n"
            );
     exit(-1);
   }
