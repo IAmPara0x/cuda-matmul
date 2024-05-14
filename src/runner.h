@@ -15,6 +15,7 @@ typedef enum MatMulKernel {
   MatMulKernelStrided = 4,
 } MatMulKernel;
 
+
 typedef struct HostMatrices {
   float *hA;
   float *hB;
@@ -33,3 +34,4 @@ std::function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
                              size_t N);
 
 #endif
+

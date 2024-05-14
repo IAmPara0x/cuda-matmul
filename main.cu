@@ -112,6 +112,7 @@ void getDeviceInfo() {
   cudaGetDeviceProperties(&props, device);
 
   std::cout << "Device Name: " << props.name << std::endl;
+  std::cout << "Compute Capability: " << props.major << props.minor << std::endl;
   std::cout << "Number of SMs: " << props.multiProcessorCount << std::endl;
   std::cout << "Max Threads per SM: " << props.maxThreadsPerMultiProcessor
             << std::endl;

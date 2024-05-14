@@ -56,15 +56,15 @@ __global__ void MatMulKernel_Strided(float *A, float *B, float *C,
   __shared__ float sA[THREADS][THREADS];
   __shared__ float sB[THREADS][THREADS];
 
-  int row = fma(blockIdx.y, blockDim.y, threadIdx.y);
-  int col = fma(blockIdx.x, blockDim.x, threadIdx.x);
+  int row = fmaf(blockIdx.y, blockDim.y, threadIdx.y);
+  int col = fmaf(blockIdx.x, blockDim.x, threadIdx.x);
 
   float sum = 0.0;
 
   int GRID = blockDim.y;
   int COL = 0;
-  int X1 = fma(blockIdx.y, GRID, threadIdx.y) * N;
-  int X2 = fma(blockIdx.x, GRID, threadIdx.y) * N;
+  int X1 = fmaf(blockIdx.y, GRID, threadIdx.y) * N;
+  int X2 = fmaf(blockIdx.x, GRID, threadIdx.y) * N;
 
   for (int i = 0; i < N; i += GRID) {
 
