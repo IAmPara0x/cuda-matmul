@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
-__global__ void MatMulKernel_Naive(float *mat1, float *mat2, float *result,
+__global__ void MatMulKernel_Naive(float *A, float *B, float *C,
                                    size_t N) {
 
   int row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -11,59 +11,79 @@ __global__ void MatMulKernel_Naive(float *mat1, float *mat2, float *result,
   float tmp = 0;
 
   for (int i = 0; i < N; i++)
-    tmp += mat1[row * N + i] * mat2[i * N + col];
+    tmp += A[row * N + i] * B[i * N + col];
 
-  result[row * N + col] = tmp;
+  C[row * N + col] = tmp;
 }
 
-__global__ void MatMulKernel_RowMajor(float *mat1, float *mat2, float *result,
-                                      size_t N) {
+__global__ void MatMulKernel_RowMajor(float *A, float *B, float *C, size_t N) {
 
   int row = threadIdx.y + blockIdx.y * blockDim.y;
   int col = threadIdx.x + blockIdx.x * blockDim.x;
 
   float tmp = 0;
 
-  for (int i = 0; i < N; i++)
-    tmp += mat1[row * N + i] * mat2[col * N + i];
+  int offsetR = row * N;
+  int offsetC = col * N;
 
-  result[row * N + col] = tmp;
+  for (int i = 0; i < N; i++)
+    tmp += A[offsetR + i] * B[offsetC + i];
+
+  C[row * N + col] = tmp;
+}
+
+__global__ void MatMulKernel_FMA(float *A, float* B, float *C, size_t N)
+{
+
+  int row = fmaf(blockIdx.y, blockDim.y, threadIdx.y);
+  int col = fmaf(blockIdx.x, blockDim.x, threadIdx.x);
+
+  float sum = 0;
+
+  int offsetR = row * N;
+  int offsetC = col * N;
+
+  for (int i = 0; i < N; i++)
+    sum += A[offsetR + i] * B[offsetC + i];
+
+  C[row * N + col] = sum;
 }
 
 // Matrix Multiplication Kernel for square matrix
-__global__ void MatMulKernel_Strided(float *mat1, float *mat2, float *result,
+__global__ void MatMulKernel_Strided(float *A, float *B, float *C,
                                      size_t N) {
 
-  __shared__ float A[THREADS][THREADS];
-  __shared__ float B[THREADS][THREADS];
+  __shared__ float sA[THREADS][THREADS];
+  __shared__ float sB[THREADS][THREADS];
 
-  int row = threadIdx.y + blockIdx.y * blockDim.y;
-  int col = threadIdx.x + blockIdx.x * blockDim.x;
+  int row = fma(blockIdx.y, blockDim.y, threadIdx.y);
+  int col = fma(blockIdx.x, blockDim.x, threadIdx.x);
 
   float sum = 0.0;
 
   int GRID = blockDim.y;
   int COL = 0;
-  int X1 = (blockIdx.y * GRID + threadIdx.y) * N;
-  int X2 = (blockIdx.x * GRID + threadIdx.y) * N;
+  int X1 = fma(blockIdx.y, GRID, threadIdx.y) * N;
+  int X2 = fma(blockIdx.x, GRID, threadIdx.y) * N;
 
   for (int i = 0; i < N; i += GRID) {
 
     COL = threadIdx.x + i;
 
-    A[threadIdx.y][threadIdx.x] = mat1[X1 + COL];
-    B[threadIdx.y][threadIdx.x] = mat2[X2 + COL];
+    sA[threadIdx.y][threadIdx.x] = A[X1 + COL];
+    sB[threadIdx.y][threadIdx.x] = B[X2 + COL];
 
     __syncthreads();
 
     for (int j = 0; j < THREADS; j++)
-      sum += A[threadIdx.y][j] * B[threadIdx.x][j];
+      sum += sA[threadIdx.y][j] * sB[threadIdx.x][j];
 
     __syncthreads();
   };
 
-  result[row * N + col] = sum;
+  C[row * N + col] = sum;
 }
+
 
 void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
                    size_t N) {
@@ -74,3 +94,5 @@ void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, N, N, &alpha, dA, N, dB, N,
               &beta, dC, N);
 }
+
+

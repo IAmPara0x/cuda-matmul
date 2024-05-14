@@ -11,7 +11,8 @@ typedef enum MatMulKernel {
   MatMulKernelCuBLAS = 0,
   MatMulKernelNaive = 1,
   MatMulKernelRowMajor = 2,
-  MatMulKernelStrided = 3,
+  MatMulKernelFMA = 3,
+  MatMulKernelStrided = 4,
 } MatMulKernel;
 
 typedef struct HostMatrices {

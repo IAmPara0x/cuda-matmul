@@ -1,7 +1,6 @@
-#include "./src/matmul.h"
 #include "./src/matrix.h"
 #include "./src/runner.h"
-#include <chrono>
+#include "./src/matmul.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <iostream>
@@ -9,12 +8,11 @@
 
 using namespace std;
 
-constexpr int N = 1024;
-constexpr size_t iterations = 100;
+constexpr int N = 1 << 10;
+constexpr size_t iterations = 1;
 
 void getDeviceInfo();
 MatMulKernel getKernelName(int argc, char **argv);
-
 
 int main(int argc, char **argv) {
 
@@ -86,16 +84,20 @@ MatMulKernel getKernelName(int argc, char **argv) {
     kernel = MatMulKernelCuBLAS;
   else if (kernel_name == "Naive")
     kernel = MatMulKernelNaive;
+  else if (kernel_name == "FMA")
+    kernel = MatMulKernelFMA;
   else if (kernel_name == "RowMajor")
     kernel = MatMulKernelRowMajor;
   else if (kernel_name == "Strided")
     kernel = MatMulKernelStrided;
   else {
     printf("Invalid Kernel. Possible Kernel:\n"
-           "\t 1. CuBLAS\n"
-           "\t 2. Naive\n"
-           "\t 3. RowMajor\n"
-           "\t 4. Strided\n");
+           "\t 0. CuBLAS\n"
+           "\t 1. Naive\n"
+           "\t 2. RowMajor\n"
+           "\t 3. FMA\n"
+           "\t 4. Strided\n"
+           );
     exit(-1);
   }
 
@@ -117,5 +119,8 @@ void getDeviceInfo() {
             << std::endl;
   std::cout << "Shared Memory per Block: " << props.sharedMemPerBlock
             << std::endl;
+  std::cout << "Wraps per Block: " << ceil((THREADS * THREADS) / 32)
+            << std::endl;
   return;
 };
+

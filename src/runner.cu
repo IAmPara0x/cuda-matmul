@@ -6,6 +6,8 @@
 using namespace std;
 
 
+#define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
+
 void cudaCheck1(cudaError_t error, const char *file, int line) {
   if (error != cudaSuccess) {
     printf("[CUDA ERROR] at file %s:%d:\n%s\n", file, line,
@@ -27,33 +29,43 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     });
   }
 
-  dim3 threadsPerBlock(THREADS, THREADS);
-  dim3 blocks((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
-              (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+  dim3 blockDim(THREADS, THREADS);
+  dim3 gridDim(CEIL_DIV(N, THREADS), CEIL_DIV(N, THREADS));
 
   if (kernel == MatMulKernelNaive) {
-    return ([handle, device, N, threadsPerBlock, blocks]() {
-      MatMulKernel_Naive<<<blocks, threadsPerBlock>>>(device.dA, device.dB, device.dC, N);
+    return ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_Naive<<<gridDim, blockDim>>>(device.dA, device.dB, device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
   }
 
+
   transpose(host.hB, N);
+
   cudaMemcpy(device.dB, host.hB, matrix_size(host.hB, N),
              cudaMemcpyHostToDevice);
 
   std::function<void()> func;
 
+
   if (kernel == MatMulKernelRowMajor)
-    func = ([handle, device, N, threadsPerBlock, blocks]() {
-      MatMulKernel_RowMajor<<<blocks, threadsPerBlock>>>(device.dA, device.dB,
+    func = ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_RowMajor<<<gridDim, blockDim>>>(device.dA, device.dB,
+                                                         device.dC, N);
+      cudaCheck(cudaDeviceSynchronize());
+    });
+
+
+  if (kernel == MatMulKernelFMA)
+    func = ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_FMA<<<gridDim, blockDim>>>(device.dA, device.dB,
                                                          device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
 
   if (kernel == MatMulKernelStrided)
-    func = ([handle, device, N, threadsPerBlock, blocks]() {
-      MatMulKernel_Strided<<<blocks, threadsPerBlock>>>(device.dA, device.dB,
+    func = ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_Strided<<<gridDim, blockDim>>>(device.dA, device.dB,
                                                         device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
@@ -69,6 +81,8 @@ std::string matmulKernelToString(MatMulKernel kernel) {
     return "MatMulKernelCuBLAS";
   case MatMulKernel::MatMulKernelNaive:
     return "MatMulKernelNaive";
+  case MatMulKernel::MatMulKernelFMA:
+    return "MatMulKernelFMA";
   case MatMulKernel::MatMulKernelRowMajor:
     return "MatMulKernelRowMajor";
   case MatMulKernel::MatMulKernelStrided:

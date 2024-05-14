@@ -1,11 +1,12 @@
 .PHONY: clean all
 
 # Compiler and Flags
-CC = nvcc
-CFLAGS = -G -rdc=true -Xcompiler -fPIC
+CUDA_HOME = /opt/cuda
+CC = ${CUDA_HOME}/bin/nvcc
+CFLAGS = -G -rdc=true -Xcompiler -fPIC --expt-relaxed-constexpr
 LINK_FLAGS = -lcudadevrt -lcublas -lcudart
-CUDA_INCLUDE_DIR = ${CUDA_TOOLKIT}/include
-CUDA_LIB_DIR = ${CUDA_TOOLKIT}/lib
+CUDA_INCLUDE_DIR = ${CUDA_HOME}/include
+CUDA_LIB_DIR = ${CUDA_HOME}/lib
 
 # Source, Header, and Object Files
 SOURCES_CU = main.cu ./src/matmul.cu ./src/runner.cu
@@ -18,7 +19,6 @@ all: main
 
 main: $(OBJECTS)
 	$(CC) $(CFLAGS) $(OBJECTS) -o $@ -L$(CUDA_LIB_DIR) $(LINK_FLAGS)
-	patchelf --set-rpath "/run/opengl-driver/lib:"$$(patchelf --print-rpath main) main
 
 # Compile CUDA Sources
 %.o: %.cu $(HEADERS)
@@ -31,3 +31,4 @@ main: $(OBJECTS)
 # Clean Up
 clean:
 	rm -f main $(OBJECTS)
+

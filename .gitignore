@@ -3,3 +3,6 @@ prefetch.*
 main
 .direnv/
 *.o
+*.sqlite
+*.nsys-rep
+./Matmul/
