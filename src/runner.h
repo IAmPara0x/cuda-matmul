@@ -8,9 +8,11 @@
 #include <functional>
 
 typedef enum MatMulKernel {
-  MatMulKernelCuBLAS = 0,
-  MatMulKernelNaive = 1,
-  MatMulKernelStrided = 2,
+  MatMulKernelCuBLAS,
+  MatMulKernelNaive,
+  MatMulKernelGlobalCoalesce,
+  MatMulKernelStrided,
+  MatMulKernel1DBlockTiling,
 } MatMulKernel;
 
 

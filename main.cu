@@ -1,6 +1,5 @@
 #include "./src/matrix.h"
 #include "./src/runner.h"
-#include "./src/matmul.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <iostream>
@@ -49,10 +48,9 @@ int main(int argc, char **argv) {
 
   if (argc == 3 && strcmp(argv[2], "-verify") == 0) {
 
-    cuBlas_MatMul(handle,dA, dB, dCRef, N);
+    runner(handle, MatMulKernelCuBLAS, {hA, hB, hCRef}, {dA, dB, dCRef}, N)();
     cudaMemcpy(hCRef, dCRef, sizeC, cudaMemcpyDeviceToHost);
 
-    // XXX: This verification unstable?
     if (same_matrix(hC, hCRef, N, 1e-1))
       cout << "Verified!" << endl;
     else
@@ -89,13 +87,18 @@ MatMulKernel getKernelName(int argc, char **argv) {
     kernel = MatMulKernelCuBLAS;
   else if (kernel_name == "Naive")
     kernel = MatMulKernelNaive;
+  else if (kernel_name == "GlobalCoalesce")
+    kernel = MatMulKernelGlobalCoalesce;
   else if (kernel_name == "Strided")
     kernel = MatMulKernelStrided;
+  else if (kernel_name == "1DBlockTiling")
+    kernel = MatMulKernel1DBlockTiling;
   else {
     printf("Invalid Kernel. Possible Kernel:\n"
            "\t 0. CuBLAS\n"
            "\t 1. Naive\n"
            "\t 2. Strided\n"
+           "\t 2. 1DBlockTiling\n"
            );
     exit(-1);
   }
@@ -112,15 +115,15 @@ void getDeviceInfo() {
 
   std::cout << "Device Name: " << props.name << std::endl;
   std::cout << "Compute Capability: " << props.major << props.minor << std::endl;
-  std::cout << "Number of SMs: " << props.multiProcessorCount << std::endl;
-  std::cout << "Max Threads per SM: " << props.maxThreadsPerMultiProcessor
-            << std::endl;
-  std::cout << "Max Threads per Block: " << props.maxThreadsPerBlock
-            << std::endl;
-  std::cout << "Shared Memory per Block: " << props.sharedMemPerBlock
-            << std::endl;
-  std::cout << "Wraps per Block: " << ceil((THREADS * THREADS) / 32)
-            << std::endl;
+  std::cout << "Max Threads per Block: " << props.maxThreadsPerBlock << std::endl;
+  std::cout << "Max Threads per MultiProcessor: " << props.maxThreadsPerMultiProcessor << std::endl;
+  std::cout << "Threads per Wrap: " << props.warpSize << std::endl;
+  std::cout << "Max Regs per Block: " << props.regsPerBlock << std::endl;
+  std::cout << "Max Regs per MultiProcessor: " << props.regsPerMultiprocessor << std::endl;
+  std::cout << "Max Shared Memory per Block: " << props.sharedMemPerBlock << std::endl;
+  std::cout << "Max Shared Memory per MultiProcessor: " << props.sharedMemPerMultiprocessor << std::endl;
+  std::cout << "SM Count: " << props.multiProcessorCount << std::endl;
+  std::cout << "Max Wrap per MultiProcessor: " << props.maxThreadsPerMultiProcessor / props.warpSize << std::endl;
   return;
 };
 

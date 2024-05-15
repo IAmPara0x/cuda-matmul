@@ -11,10 +11,13 @@ check_language(CUDA)
 set(CMAKE_CXX_STANDARD 20)
 set(CUDA_COMPUTE_CAPABILITY 89)
 
+
 # in debug mode, add debug symbols to device code
 # this disables most optimizations and kills performance
-add_compile_options("$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-src-in-ptx>")
-# add_compile_options("--ptxas-options=-v")
+add_compile_options( "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-src-in-ptx>")
+add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra>")
+add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>")
+
 
 # Configure header file search paths
 include_directories(${CUDA_INCLUDE_DIRS})
@@ -27,3 +30,4 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/src SRC)
 add_executable(main main.cu ${SRC})
 set_target_properties(main PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
 target_link_libraries(main ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
+

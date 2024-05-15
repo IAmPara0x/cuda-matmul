@@ -1,5 +1,5 @@
 #include "functional"
-#include "matmul.h"
+#include "matmul.cuh"
 #include "matrix.h"
 #include "runner.h"
 
@@ -29,29 +29,59 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     });
   }
 
-  dim3 blockDim(THREADS, THREADS);
-  dim3 gridDim(CEIL_DIV(N, THREADS), CEIL_DIV(N, THREADS));
 
   if (kernel == MatMulKernelNaive) {
+
+    dim3 blockDim(16, 16);
+    dim3 gridDim(CEIL_DIV(N, 16), CEIL_DIV(N, 16));
+
     return ([handle, device, N, blockDim, gridDim]() {
       MatMulKernel_Naive<<<gridDim, blockDim>>>(device.dA, device.dB, device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
+
   }
 
-  cudaMemcpy(device.dB, host.hB, matrix_size(host.hB, N),
-             cudaMemcpyHostToDevice);
+  if (kernel == MatMulKernelGlobalCoalesce) {
 
-  std::function<void()> func;
+    dim3 blockDim(16 * 16);
+    dim3 gridDim(CEIL_DIV(N, 16), CEIL_DIV(N, 16));
 
-  if (kernel == MatMulKernelStrided)
-    func = ([handle, device, N, blockDim, gridDim]() {
-      MatMulKernel_Strided<<<gridDim, blockDim>>>(device.dA, device.dB,
-                                                        device.dC, N);
+    return ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_GlobalCoalesce<16><<<gridDim, blockDim>>>(device.dA, device.dB, device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
 
-  return func;
+  }
+
+  if (kernel == MatMulKernelStrided) {
+
+
+      constexpr uint T = 32;
+      dim3 blockDim(T * T);
+      dim3 gridDim(CEIL_DIV(N, T), CEIL_DIV(N, T));
+
+      return ([handle, device, N, blockDim, gridDim]() { 
+          MatMulKernel_Strided<T>
+            <<<gridDim, blockDim>>>(device.dA, device.dB, device.dC, N);
+          cudaCheck(cudaDeviceSynchronize());
+        });
+  }
+
+  if (kernel == MatMulKernel1DBlockTiling)
+  {
+
+    dim3 blockDim(THREADS, THREADS);
+    dim3 gridDim(CEIL_DIV(N, THREADS), CEIL_DIV(N, THREADS));
+
+    return ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_1DBlockTiling<<<gridDim, blockDim>>>(device.dA, device.dB,
+                                                        device.dC, N);
+      cudaCheck(cudaDeviceSynchronize());
+    });
+  }
+
+  throw runtime_error("Unreachable!");
 }
 
 std::string matmulKernelToString(MatMulKernel kernel) {
@@ -61,8 +91,12 @@ std::string matmulKernelToString(MatMulKernel kernel) {
     return "MatMulKernelCuBLAS";
   case MatMulKernel::MatMulKernelNaive:
     return "MatMulKernelNaive";
+  case MatMulKernel::MatMulKernelGlobalCoalesce:
+    return "MatMulKernelGlobalCoalesce";
   case MatMulKernel::MatMulKernelStrided:
     return "MatMulKernelStrided";
+  case MatMulKernel::MatMulKernel1DBlockTiling:
+    return "MatMulKernel1DBlockTiling";
   default:
     return "UNKNOWN";
   }
