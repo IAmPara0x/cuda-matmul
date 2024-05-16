@@ -87,39 +87,46 @@ __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
 
   float tmpB = 0.0f, result[T] = {0.0f};
 
-  A += (blockIdx.y * DM + threadIdx.x) * N;
+  uint colA, rowA, colB, rowB;
+
+  colA = threadIdx.x % DK;
+  rowA = threadIdx.x / DK;
+
+  colB = threadIdx.x % DM;
+  rowB = threadIdx.x / DM;
+
+
+  A += (blockIdx.y * DM + rowA) * N;
   B += DM * blockIdx.x;
+
 
   for (uint i = 0; i < N; i += DK) {
 
-    // Not Coalesced                Not Coalesced
-    sA[threadIdx.x][threadIdx.y] = A[threadIdx.y];
-
-    // Coalesced                    Coalesced
-    sB[threadIdx.y][threadIdx.x] = B[threadIdx.y * N + threadIdx.x];
-
-    A += DK;
-    B += DK * N;
+    sA[rowA][colA] = A[colA];
+    sB[rowB][colB] = B[rowB * N + colB];
 
     __syncthreads();
 
     for (uint j = 0; j < DK; j++)
     {
-      // Coalesced
-      tmpB = sB[j][threadIdx.x];
+      tmpB = sB[j][colB];
 
       for (uint k = 0; k < T; k++)
-        result[k] += sA[(threadIdx.y * T) + k][j] * tmpB;
+        result[k] += sA[(rowB * T) + k][j] * tmpB;
     }
 
     __syncthreads();
+
+    A += DK;
+    B += DK * N;
+
   }
 
   C += blockIdx.y * DM * N;
 
-  uint col = fmaf(blockIdx.x, DM, threadIdx.x);
+  uint col = fmaf(blockIdx.x, DM, colB);
   for (uint i = 0; i < T; i++)
-    C[(threadIdx.y * T + i) * N + col] = result[i];
+    C[(rowB * T + i) * N + col] = result[i];
 
 }
 

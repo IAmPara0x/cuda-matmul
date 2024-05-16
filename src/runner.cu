@@ -74,7 +74,7 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     constexpr uint DM = 64;
     constexpr uint DK = 8;
     constexpr uint T  = DM / DK;
-    dim3 blockDim(DM, DK);
+    dim3 blockDim(DM * DK);
     dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
 
     return ([handle, device, N, blockDim, gridDim]() {
