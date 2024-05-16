@@ -7,8 +7,6 @@
 #include <stdio.h>
 
 
-#define THREADS 32
-
 __global__ void MatMulKernel_Naive(float *A, float *B, float *C,
                                    size_t N) {
 
@@ -79,44 +77,47 @@ __global__ void MatMulKernel_Strided(float *A, float *B, float *C,
   C[(blockIdx.y * BLOCKSIZE + threadRow) * N + (blockIdx.x * BLOCKSIZE + threadCol)] = sum;
 }
 
+template<const uint DM, const uint DK, const uint T>
+__global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
+                                     size_t N) {
 
-template<const uint H, const uint  W, const uint K>
-__global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C, size_t N) {
+  __shared__ float sA[DM][DK];
+  __shared__ float sB[DK][DM];
 
+  uint col = fmaf(blockIdx.x, DM, threadIdx.x);
 
-
-  // sA=(H,K), sB=(K,W)
-  __shared__ float sA[THREADS][THREADS];
-  __shared__ float sB[THREADS][THREADS];
-
-  uint col = fmaf(blockIdx.x, blockDim.x, threadIdx.x);
-
-  float tmpB = 0.0, results[THREADS] = {0.0f};
+  float tmpB = 0.0f, result[T] = {0.0f};
 
   uint x1,y2;
 
-  x1 = (blockIdx.y * THREADS + threadIdx.y) * N;
-  y2 = (THREADS * blockIdx.x + threadIdx.x);
+  x1 = (blockIdx.y * DM + threadIdx.x) * N;
+  y2 = (DM * blockIdx.x + threadIdx.x);
 
 
-  for (uint i = 0; i < N; i += blockDim.y) {
+  for (uint i = 0; i < N; i += DK) {
 
-    sA[threadIdx.y][threadIdx.x] = A[x1 + threadIdx.x + i];
-    sB[threadIdx.y][threadIdx.x] = B[(uint)fmaf((threadIdx.y + i), N, y2)];
+    sA[threadIdx.x][threadIdx.y] = A[x1 + threadIdx.y + i];
+    sB[threadIdx.y][threadIdx.x] = B[(threadIdx.y + i) * N + y2];
+
 
     __syncthreads();
 
-    for (uint j = 0; j < THREADS; j++)
+    for (uint j = 0; j < DK; j++)
     {
       tmpB = sB[j][threadIdx.x];
-      for (uint k = 0; k < THREADS; k++)
-        results[k] = fmaf(sA[k][j], tmpB, results[k]);
+
+      for (uint k = 0; k < T; k++)
+        result[k] += sA[(threadIdx.y * T) + k][j] * tmpB;
     }
+
     __syncthreads();
   }
 
-  for (uint i = 0; i < THREADS; i++)
-    C[(THREADS * blockIdx.y + i) * N + col] = results[i];
+  C += blockIdx.y * DM * N;
+
+  for (uint i = 0; i < T; i++)
+    C[(threadIdx.y * T + i) * N + col] = result[i];
+
 }
 
 

@@ -1,7 +1,7 @@
 #include "functional"
 #include "matmul.cuh"
-#include "matrix.h"
 #include "runner.h"
+#include <stdexcept>
 
 using namespace std;
 
@@ -57,7 +57,7 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
   if (kernel == MatMulKernelStrided) {
 
 
-      constexpr uint T = 32;
+      constexpr uint T = 16;
       dim3 blockDim(T * T);
       dim3 gridDim(CEIL_DIV(N, T), CEIL_DIV(N, T));
 
@@ -71,11 +71,14 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
   if (kernel == MatMulKernel1DBlockTiling)
   {
 
-    dim3 blockDim(THREADS, THREADS);
-    dim3 gridDim(CEIL_DIV(N, THREADS), CEIL_DIV(N, THREADS));
+    constexpr uint DM = 32;
+    constexpr uint DK = 8;
+    constexpr uint T  = DM / DK;
+    dim3 blockDim(DM, DK);
+    dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
 
     return ([handle, device, N, blockDim, gridDim]() {
-      MatMulKernel_1DBlockTiling<<<gridDim, blockDim>>>(device.dA, device.dB,
+      MatMulKernel_1DBlockTiling<DM,DK,T><<<gridDim, blockDim>>>(device.dA, device.dB,
                                                         device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
