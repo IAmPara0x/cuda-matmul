@@ -81,7 +81,7 @@ template<const uint DM, const uint DK, const uint T>
 __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
                                      size_t N) {
 
-  __shared__ float sA[DM][DK];
+  __shared__ float sA[DK][DM];
   __shared__ float sB[DK][DM];
 
 
@@ -102,7 +102,7 @@ __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
 
   for (uint i = 0; i < N; i += DK) {
 
-    sA[rowA][colA] = A[colA];
+    sA[colA][rowA] = A[colA];
     sB[rowB][colB] = B[rowB * N + colB];
 
     __syncthreads();
@@ -112,7 +112,7 @@ __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
       tmpB = sB[j][colB];
 
       for (uint k = 0; k < T; k++)
-        result[k] += sA[(rowB * T) + k][j] * tmpB;
+        result[k] += sA[j][(rowB * T) + k] * tmpB;
     }
 
     __syncthreads();
