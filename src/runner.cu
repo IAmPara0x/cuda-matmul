@@ -71,7 +71,7 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
   if (kernel == MatMulKernel1DBlockTiling)
   {
 
-    constexpr uint DM = 32;
+    constexpr uint DM = 64;
     constexpr uint DK = 8;
     constexpr uint T  = DM / DK;
     dim3 blockDim(DM, DK);
