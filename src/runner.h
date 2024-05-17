@@ -13,6 +13,7 @@ typedef enum MatMulKernel {
   MatMulKernelGlobalCoalesce,
   MatMulKernelStrided,
   MatMulKernel1DBlockTiling,
+  MatMulKernel2DBlockTiling,
 } MatMulKernel;
 
 

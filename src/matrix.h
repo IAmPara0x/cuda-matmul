@@ -3,9 +3,8 @@
 #define MATRIX_H
 
 #include <functional>
-#include <iostream>
 
-template <typename T> inline size_t matrix_size(T *mat, size_t N) {
+template <typename T> inline size_t matrix_size(T *_mat, size_t N) {
   return N * N * sizeof(T);
 }
 

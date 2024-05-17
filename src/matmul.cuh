@@ -53,17 +53,13 @@ __global__ void MatMulKernel_Strided(float *A, float *B, float *C,
 
   float sum = 0.0;
 
-  uint x1,y2;
-
-  x1 = (blockIdx.y * BLOCKSIZE + threadRow) * N;
-  y2 = (BLOCKSIZE * blockIdx.x + threadCol);
-
+  A += (blockIdx.y * BLOCKSIZE + threadRow) * N;
+  B += (BLOCKSIZE * blockIdx.x + threadCol);
 
   for (uint i = 0; i < N; i += BLOCKSIZE) {
 
-    sA[threadRow][threadCol] = A[x1 + threadCol + i];
-    sB[threadRow][threadCol] = B[(uint)fmaf((threadRow + i), N, y2)];
-
+    sA[threadRow][threadCol] = A[threadCol];
+    sB[threadRow][threadCol] = B[threadRow * N];
 
     __syncthreads();
 
@@ -71,6 +67,9 @@ __global__ void MatMulKernel_Strided(float *A, float *B, float *C,
       sum = fmaf(sA[threadRow][j], sB[j][threadCol], sum);
 
     __syncthreads();
+
+    A += BLOCKSIZE;
+    B += BLOCKSIZE * N;
 
   }
 
@@ -131,6 +130,75 @@ __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
 }
 
 
+template<const uint DM, const uint DK, const uint TM, const uint TK>
+__global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
+                                     size_t N) {
+
+  __shared__ float sA[DK][DM];
+  __shared__ float sB[DK][DM];
+
+
+  float result[TM][TK] = {0.0f}, colN[TK] = {0.0f}, rowN[TM] = {0.0f};
+
+  uint colA, rowA, colB, rowB;
+
+  colA = threadIdx.x % DK;
+  rowA = threadIdx.x / DK;
+
+  colB = threadIdx.x % DM;
+  rowB = threadIdx.x / DM;
+
+  const int threadCol = threadIdx.x % (DM / TK);
+  const int threadRow = threadIdx.x / (DM / TK);
+
+  A += (blockIdx.y * DM) * N;
+  B += DM * blockIdx.x;
+
+
+  for (uint i = 0; i < N; i += DK) {
+
+
+    for (uint j = 0; j < TK; j++)
+      sA[colA][rowA * TK + j] = A[(rowA * TK + j) * N + colA];
+
+    for (uint j = 0; j < TK; j++)
+      sB[rowB * TK + j][colB] = B[(rowB * TK + j) * N + colB];
+
+    __syncthreads();
+
+    for (uint dotIdx = 0; dotIdx < DK; dotIdx++)
+    {
+      for (uint colT = 0; colT < TK; colT++)
+        colN[colT] = sB[dotIdx][threadCol * TK + colT];
+
+      for (uint rowT = 0; rowT < TM; rowT++)
+        rowN[rowT] = sA[dotIdx][TM * threadRow + rowT];
+
+      for (uint colT = 0; colT < TK; colT++)
+        for (uint rowT = 0; rowT < TM; rowT++)
+          result[rowT][colT] += rowN[rowT] * colN[colT];
+    }
+
+    __syncthreads();
+
+    A += DK;
+    B += DK * N;
+
+  }
+
+  C += blockIdx.y * DM * N + blockIdx.x * DM;
+
+  for (uint colT = 0; colT < TK; colT++)
+  {
+    uint col = threadCol * TK + colT;
+    for (uint rowT = 0; rowT < TM; rowT++)
+      C[(threadRow * TM + rowT) * N + col] = result[rowT][colT];
+  }
+
+}
+
+
+
 void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
                    size_t N) {
 
@@ -142,3 +210,4 @@ void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
 }
 
 #endif
+

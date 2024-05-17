@@ -93,12 +93,15 @@ MatMulKernel getKernelName(int argc, char **argv) {
     kernel = MatMulKernelStrided;
   else if (kernel_name == "1DBlockTiling")
     kernel = MatMulKernel1DBlockTiling;
+  else if (kernel_name == "2DBlockTiling")
+    kernel = MatMulKernel2DBlockTiling;
   else {
     printf("Invalid Kernel. Possible Kernel:\n"
            "\t 0. CuBLAS\n"
            "\t 1. Naive\n"
            "\t 2. Strided\n"
-           "\t 2. 1DBlockTiling\n"
+           "\t 3. 1DBlockTiling\n"
+           "\t 4. 2DBlockTiling\n"
            );
     exit(-1);
   }

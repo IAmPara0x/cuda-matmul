@@ -84,6 +84,23 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     });
   }
 
+  if (kernel == MatMulKernel2DBlockTiling)
+  {
+
+    constexpr uint DM = 64;
+    constexpr uint DK = 8;
+    constexpr uint TM = DM / DK;
+    constexpr uint TK = 2;
+    dim3 blockDim((DM * DK) / TK);
+    dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
+
+    return ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_2DBlockTiling<DM,DK,TM,TK><<<gridDim, blockDim>>>(device.dA, device.dB,
+                                                        device.dC, N);
+      cudaCheck(cudaDeviceSynchronize());
+    });
+  }
+
   throw runtime_error("Unreachable!");
 }
 
@@ -100,6 +117,8 @@ std::string matmulKernelToString(MatMulKernel kernel) {
     return "MatMulKernelStrided";
   case MatMulKernel::MatMulKernel1DBlockTiling:
     return "MatMulKernel1DBlockTiling";
+  case MatMulKernel::MatMulKernel2DBlockTiling:
+    return "MatMulKernel2DBlockTiling";
   default:
     return "UNKNOWN";
   }
