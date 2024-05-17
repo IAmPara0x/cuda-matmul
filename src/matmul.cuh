@@ -135,7 +135,8 @@ template<const uint DM, const uint DK, const uint TM, const uint TK>
 __global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
                                      size_t N) {
 
-  __shared__ float sA[DK][DM];
+  // TODO: Find a general way to add padding
+  __shared__ float sA[DK][DM + 4];
   __shared__ float sB[DK][DM];
 
 
