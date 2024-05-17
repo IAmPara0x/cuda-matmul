@@ -69,6 +69,8 @@ int main(int argc, char **argv) {
   free(hB);
   free(hC);
   free(hCRef);
+  cudaDeviceReset();
+  return 0;
 };
 
 MatMulKernel getKernelName(int argc, char **argv) {

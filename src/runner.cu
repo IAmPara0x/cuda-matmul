@@ -5,7 +5,6 @@
 
 using namespace std;
 
-
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
 
 void cudaCheck1(cudaError_t error, const char *file, int line) {

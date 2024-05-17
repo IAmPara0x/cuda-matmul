@@ -80,7 +80,8 @@ template<const uint DM, const uint DK, const uint T>
 __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
                                      size_t N) {
 
-  __shared__ float sA[DK][DM];
+  // TODO: FIND a general way to reduce bank conflict
+  __shared__ float sA[DK][DM + 4];
   __shared__ float sB[DK][DM];
 
 
@@ -198,7 +199,6 @@ __global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
 }
 
 
-
 void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
                    size_t N) {
 
@@ -210,4 +210,3 @@ void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
 }
 
 #endif
-
