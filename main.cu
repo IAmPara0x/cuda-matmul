@@ -97,6 +97,8 @@ MatMulKernel getKernelName(int argc, char **argv) {
     kernel = MatMulKernel1DBlockTiling;
   else if (kernel_name == "2DBlockTiling")
     kernel = MatMulKernel2DBlockTiling;
+  else if (kernel_name == "Final")
+    kernel = MatMulKernelFinal;
   else {
     printf("Invalid Kernel. Possible Kernel:\n"
            "\t 0. CuBLAS\n"
@@ -104,6 +106,7 @@ MatMulKernel getKernelName(int argc, char **argv) {
            "\t 2. Strided\n"
            "\t 3. 1DBlockTiling\n"
            "\t 4. 2DBlockTiling\n"
+           "\t 5. Final\n"
            );
     exit(-1);
   }

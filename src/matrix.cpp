@@ -6,6 +6,15 @@
 
 using namespace std;
 
+
+void cudaCheck1(cudaError_t error, const char *file, int line) {
+  if (error != cudaSuccess) {
+    printf("[CUDA ERROR] at file %s:%d:\n%s\n", file, line,
+           cudaGetErrorString(error));
+    exit(EXIT_FAILURE);
+  }
+};
+
 void print_mat(float *matrix, size_t N) {
   for (size_t i = 0; i < N; i++) {
     for (size_t j = 0; j < N; j++)
@@ -75,21 +84,22 @@ bool same_matrix(float *A, float *B, size_t N, float tolerance) {
 
 float measure_gflops(std::function<void()> MatMul_kernel, size_t N, size_t iterations) {
 
-  float elapsed_time, total_elapsed_time = 0;
+  float elapsed_time = 0, total_elapsed_time = 0;
   cudaEvent_t beg, end;
-  cudaEventCreate(&beg);
-  cudaEventCreate(&end);
+
+  cudaCheck(cudaEventCreate(&beg));
+  cudaCheck(cudaEventCreate(&end));
 
   size_t flops = 2 * N * N * N;
 
   for (size_t i = 0; i < iterations; ++i) {
-    cudaEventRecord(beg);
+    cudaCheck(cudaEventRecord(beg));
     MatMul_kernel();
-    cudaEventRecord(end);
+    cudaCheck(cudaEventRecord(end));
 
-    cudaEventSynchronize(beg);
-    cudaEventSynchronize(end);
-    cudaEventElapsedTime(&elapsed_time, beg, end);
+    cudaCheck(cudaEventSynchronize(beg));
+    cudaCheck(cudaEventSynchronize(end));
+    cudaCheck(cudaEventElapsedTime(&elapsed_time, beg, end));
     elapsed_time /= 1000; // Convert to seconds
     total_elapsed_time += elapsed_time;
   }

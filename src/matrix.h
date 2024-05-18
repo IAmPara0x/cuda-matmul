@@ -3,6 +3,7 @@
 #define MATRIX_H
 
 #include <functional>
+#include <cuda_runtime.h>
 
 template <typename T> inline size_t matrix_size(T *_mat, size_t N) {
   return N * N * sizeof(T);
@@ -17,5 +18,9 @@ bool same_matrix(float *A, float *B, size_t N, float tolerance);
 
 float measure_gflops(std::function<void()> MatMul_kernel, size_t N,
                      size_t iterations);
+
+void cudaCheck1(cudaError_t error, const char *file, int line);
+
+#define cudaCheck(err) (cudaCheck1(err, __FILE__, __LINE__))
 
 #endif

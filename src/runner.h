@@ -14,6 +14,7 @@ typedef enum MatMulKernel {
   MatMulKernelStrided,
   MatMulKernel1DBlockTiling,
   MatMulKernel2DBlockTiling,
+  MatMulKernelFinal,
 } MatMulKernel;
 
 

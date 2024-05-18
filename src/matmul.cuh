@@ -2,6 +2,7 @@
 
 #define _MATMUL_KERNEL_
 
+#include <cassert>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <stdio.h>
@@ -135,6 +136,10 @@ template<const uint DM, const uint DK, const uint TM, const uint TK>
 __global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
                                      size_t N) {
 
+
+  assert (TM % 4 == 0 && "TM must be divisble by 4.");
+  assert (TK % 4 == 0 && "TK must be divisble by 4.");
+
   // TODO: Find a general way to add padding
   __shared__ float sA[DK][DM + 4];
   __shared__ float sB[DK][DM];
@@ -200,6 +205,79 @@ __global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
 }
 
 
+
+template<const uint DM, const uint DK, const uint TM, const uint TK>
+__global__ void MatMulKernel_Final(float *A, float *B, float *C,
+                                     uint N) {
+
+  assert (TM % 4 == 0 && "TM must be divisble by 4.");
+  assert (TK % 4 == 0 && "TK must be divisble by 4.");
+
+  // TODO: Find a general way to add padding
+  __shared__ float sA[DK][DM + 4];
+  __shared__ float sB[DK][DM];
+
+
+  float result[TM][TK] = {0.0f}, colN[TK] = {0.0f}, rowN[TM] = {0.0f};
+
+  uint colA, rowA, colB, rowB;
+
+  colA = threadIdx.x % DK;
+  rowA = threadIdx.x / DK;
+
+  colB = threadIdx.x % (DM / TK);
+  rowB = threadIdx.x / (DM / TK);
+
+  const int threadCol = threadIdx.x % (DM / TK);
+  const int threadRow = threadIdx.x / (DM / TK);
+
+  A += (blockIdx.y * DM) * N;
+  B += rowB * N + DM * blockIdx.x;
+
+
+  for (uint i = 0; i < N; i += DK) {
+
+    for (uint j = 0; j < TK; j += 1)
+      sA[colA][rowA * TK + j] = A[(rowA * TK + j) * N + colA];
+
+    for (uint j = 0; j < TK; j += 4)
+      reinterpret_cast<float4 *>(&sB[rowB][colB * TK + j])[0] = reinterpret_cast<float4 *>(&B[colB * TK + j])[0];
+
+    __syncthreads();
+
+    for (uint dotIdx = 0; dotIdx < DK; dotIdx++)
+    {
+
+      for (uint colT = 0; colT < TK; colT += 4)
+        reinterpret_cast<float4 *>(&colN[colT])[0] = reinterpret_cast<float4 *>(&sB[dotIdx][threadCol * TK + colT])[0];
+
+      for (uint rowT = 0; rowT < TM; rowT += 4)
+        reinterpret_cast<float4 *>(&rowN[rowT])[0] = reinterpret_cast<float4 *>(&sA[dotIdx][threadRow * TM + rowT])[0];
+
+      for (uint colT = 0; colT < TK; colT++)
+        for (uint rowT = 0; rowT < TM; rowT++)
+          result[rowT][colT] += rowN[rowT] * colN[colT];
+    }
+
+    __syncthreads();
+
+    A += DK;
+    B += DK * N;
+
+  }
+
+  C += blockIdx.y * DM * N + blockIdx.x * DM;
+
+  for (uint colT = 0; colT < TK; colT++)
+  {
+    uint col = threadCol * TK + colT;
+    for (uint rowT = 0; rowT < TM; rowT++)
+      C[(threadRow * TM + rowT) * N + col] = result[rowT][colT];
+  }
+
+}
+
+
 void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
                    size_t N) {
 
@@ -211,3 +289,4 @@ void cuBlas_MatMul(cublasHandle_t handle, float *dA, float *dB, float *dC,
 }
 
 #endif
+

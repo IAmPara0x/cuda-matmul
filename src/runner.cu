@@ -1,21 +1,12 @@
 #include "functional"
 #include "matmul.cuh"
+#include "matrix.h"
 #include "runner.h"
 #include <stdexcept>
 
 using namespace std;
 
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
-
-void cudaCheck1(cudaError_t error, const char *file, int line) {
-  if (error != cudaSuccess) {
-    printf("[CUDA ERROR] at file %s:%d:\n%s\n", file, line,
-           cudaGetErrorString(error));
-    exit(EXIT_FAILURE);
-  }
-};
-
-#define cudaCheck(err) (cudaCheck1(err, __FILE__, __LINE__))
 
 function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
                              HostMatrices host, DeviceMatrices device,
@@ -89,13 +80,32 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     constexpr uint DM = 64;
     constexpr uint DK = 8;
     constexpr uint TM = DM / DK;
-    constexpr uint TK = 2;
+    constexpr uint TK = 4;
     dim3 blockDim((DM * DK) / TK);
     dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
 
     return ([handle, device, N, blockDim, gridDim]() {
       MatMulKernel_2DBlockTiling<DM,DK,TM,TK><<<gridDim, blockDim>>>(device.dA, device.dB,
                                                         device.dC, N);
+      cudaCheck(cudaDeviceSynchronize());
+    });
+  }
+
+  if (kernel == MatMulKernelFinal)
+  {
+
+    constexpr uint DM = 64;
+    constexpr uint DK = 8;
+    constexpr uint TM = DM / DK;
+    constexpr uint TK = 4;
+    dim3 blockDim((DM * DK) / TK);
+    dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
+
+    return ([handle, device, N, blockDim, gridDim]() {
+      MatMulKernel_Final<DM,DK,TM,TK><<<gridDim, blockDim>>>(device.dA, device.dB,
+                                                        device.dC, N);
+      // matrixMulDoubleBuffer<32><<<gridDim, blockDim>>>(device.dA, device.dB,
+      //                                                   device.dC, N);
       cudaCheck(cudaDeviceSynchronize());
     });
   }
@@ -118,6 +128,8 @@ std::string matmulKernelToString(MatMulKernel kernel) {
     return "MatMulKernel1DBlockTiling";
   case MatMulKernel::MatMulKernel2DBlockTiling:
     return "MatMulKernel2DBlockTiling";
+  case MatMulKernel::MatMulKernelFinal:
+    return "MatMulKernelFinal";
   default:
     return "UNKNOWN";
   }
