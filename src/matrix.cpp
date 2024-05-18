@@ -84,7 +84,7 @@ bool same_matrix(float *A, float *B, size_t N, float tolerance) {
 
 float measure_gflops(std::function<void()> MatMul_kernel, size_t N, size_t iterations) {
 
-  float elapsed_time = 0, total_elapsed_time = 0;
+  float elapsed_time = 0;
   cudaEvent_t beg, end;
 
   cudaCheck(cudaEventCreate(&beg));
@@ -92,17 +92,15 @@ float measure_gflops(std::function<void()> MatMul_kernel, size_t N, size_t itera
 
   size_t flops = 2 * N * N * N;
 
+  cudaCheck(cudaEventRecord(beg));
   for (size_t i = 0; i < iterations; ++i) {
-    cudaCheck(cudaEventRecord(beg));
     MatMul_kernel();
-    cudaCheck(cudaEventRecord(end));
-
-    cudaCheck(cudaEventSynchronize(beg));
-    cudaCheck(cudaEventSynchronize(end));
-    cudaCheck(cudaEventElapsedTime(&elapsed_time, beg, end));
-    elapsed_time /= 1000; // Convert to seconds
-    total_elapsed_time += elapsed_time;
   }
+  cudaCheck(cudaEventRecord(end));
+  cudaCheck(cudaEventSynchronize(beg));
+  cudaCheck(cudaEventSynchronize(end));
+  cudaCheck(cudaEventElapsedTime(&elapsed_time, beg, end));
+  elapsed_time /= 1000; // Convert to seconds
 
-  return (iterations * flops * 1e-9) / total_elapsed_time;
+  return (iterations * flops * 1e-9) / elapsed_time;
 };
