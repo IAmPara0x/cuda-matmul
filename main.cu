@@ -8,7 +8,8 @@
 using namespace std;
 
 constexpr int N = 1 << 12;
-constexpr size_t iterations = 1;
+
+#define USAGE "USAGE: main <KERNEL_NAME> -iter=<NUM> -verify \n"
 
 void getDeviceInfo();
 MatMulKernel getKernelName(int argc, char **argv);
@@ -29,6 +30,8 @@ int main(int argc, char **argv) {
   float *dA = nullptr, *dB = nullptr, *dC = nullptr, *dCRef = nullptr;
   float gflops;
 
+  size_t iterations = 1;
+
   cudaMalloc((void **)&dA, sizeA);
   cudaMalloc((void **)&dB, sizeB);
   cudaMalloc((void **)&dC, sizeC);
@@ -39,14 +42,14 @@ int main(int argc, char **argv) {
 
   auto func = runner(handle, kernel, {hA, hB, hC}, {dA, dB, dC}, N);
 
-  gflops = measure_gflops(func, N, iterations); //
 
-  printf("%s performance: (%f) GFLOPS. size: %d\n",
-         matmulKernelToString(kernel).c_str(), gflops, N);
-
-  cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
-
+  // HACK: Currently we only expect max 2 argument.
   if (argc == 3 && strcmp(argv[2], "-verify") == 0) {
+
+    gflops = measure_gflops(func, N, iterations);
+    printf("%s performance: (%f) GFLOPS. size: %d\n",
+           matmulKernelToString(kernel).c_str(), gflops, N);
+    cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
 
     runner(handle, MatMulKernelCuBLAS, {hA, hB, hCRef}, {dA, dB, dCRef}, N)();
     cudaMemcpy(hCRef, dCRef, sizeC, cudaMemcpyDeviceToHost);
@@ -55,7 +58,20 @@ int main(int argc, char **argv) {
       cout << "Verified!" << endl;
     else
       cout << "Verification Failed!" << endl;
+
+  } else if (argc == 4 && strcmp(argv[2], "-iter") == 0) {
+
+    // TODO: Handle error to prevent memory leak
+    iterations = stoul(argv[3]);
+    gflops = measure_gflops(func, N, iterations);
+    printf("%s performance: (%f) GFLOPS, iterations: %zu size: %d\n",
+           matmulKernelToString(kernel).c_str(), gflops, iterations, N);
+
+  } else {
+    printf("%s\n", argv[2]);
+    printf(USAGE);
   }
+
 
   // cuda free, matrices:
   cudaFree(dA);
@@ -77,7 +93,7 @@ MatMulKernel getKernelName(int argc, char **argv) {
 
   if (argc == 1)
   {
-    printf("USAGE: main <KERNEL_NAME> -verify\n");
+    printf(USAGE);
     exit(-1);
   }
 
