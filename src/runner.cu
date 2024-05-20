@@ -22,8 +22,9 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
 
   if (kernel == MatMulKernelNaive) {
 
-    dim3 blockDim(16, 16);
-    dim3 gridDim(CEIL_DIV(N, 16), CEIL_DIV(N, 16));
+    constexpr uint THREADS = 16;
+    dim3 blockDim(THREADS, THREADS);
+    dim3 gridDim(CEIL_DIV(N, THREADS), CEIL_DIV(N, THREADS));
 
     return ([handle, device, N, blockDim, gridDim]() {
       MatMulKernel_Naive<<<gridDim, blockDim>>>(device.dA, device.dB, device.dC, N);
@@ -94,15 +95,16 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
   if (kernel == MatMulKernelFinal)
   {
 
-    constexpr uint DM = 64;
-    constexpr uint DK = 8;
+    constexpr uint DM = 128;
+    constexpr uint DK = 16;
     constexpr uint TM = DM / DK;
     constexpr uint TK = 4;
+    constexpr uint WN = 2;
     dim3 blockDim((DM * DK) / TK);
     dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
 
     return ([handle, device, N, blockDim, gridDim]() {
-      MatMulKernel_Final<DM,DK,TM,TK><<<gridDim, blockDim>>>(device.dA, device.dB,
+      MatMulKernel_Final<DM,DK,TM,TK,WN><<<gridDim, blockDim>>>(device.dA, device.dB,
                                                         device.dC, N);
       // matrixMulDoubleBuffer<32><<<gridDim, blockDim>>>(device.dA, device.dB,
       //                                                   device.dC, N);

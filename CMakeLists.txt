@@ -35,4 +35,3 @@ add_executable(main main.cu ${SRC})
 set_target_properties(main PROPERTIES CUDA_ARCHITECTURES ${CUDA_COMPUTE_CAPABILITY})
 target_link_libraries(main ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
 
-

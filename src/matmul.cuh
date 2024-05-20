@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <stdio.h>
+#include "device_launch_parameters.h"
 
 
 __global__ void MatMulKernel_Naive(float *A, float *B, float *C,
@@ -98,6 +99,7 @@ __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
 
 
   A += (blockIdx.y * DM + rowA) * N;
+ #include "device_launch_parameters.h"
   B += DM * blockIdx.x;
 
 
@@ -206,7 +208,7 @@ __global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
 
 
 
-template<const uint DM, const uint DK, const uint TM, const uint TK>
+template<const uint DM, const uint DK, const uint TM, const uint TK, const uint WN>
 __global__ void MatMulKernel_Final(float *A, float *B, float *C,
                                      uint N) {
 
@@ -220,25 +222,28 @@ __global__ void MatMulKernel_Final(float *A, float *B, float *C,
 
   float result[TM][TK] = {0.0f}, colN[TK] = {0.0f}, rowN[TM] = {0.0f};
 
-  uint colA, rowA, colB, rowB;
+  uint colA, rowA, colB, rowB, tx = threadIdx.x;
 
-  colA = threadIdx.x % DK;
-  rowA = threadIdx.x / DK;
+  colA = tx % DK;
+  rowA = tx / DK;
 
-  colB = threadIdx.x % (DM / TK);
-  rowB = threadIdx.x / (DM / TK);
+  colB = tx % (DM / TK);
+  rowB = tx / (DM / TK);
 
-  const int threadCol = threadIdx.x % (DM / TK);
-  const int threadRow = threadIdx.x / (DM / TK);
+  const int threadCol = tx % (DM / TK);
+  const int threadRow = tx / (DM / TK);
+
+  // const int threadCol = tx % (DM / (TK * WN));
+  // const int threadRow = tx / (DM / (TK * WN));
 
   A += (blockIdx.y * DM) * N;
   B += rowB * N + DM * blockIdx.x;
-
 
   for (uint i = 0; i < N; i += DK) {
 
     for (uint j = 0; j < TK; j += 1)
       sA[colA][rowA * TK + j] = A[(rowA * TK + j) * N + colA];
+
 
     for (uint j = 0; j < TK; j += 4)
       reinterpret_cast<float4 *>(&sB[rowB][colB * TK + j])[0] = reinterpret_cast<float4 *>(&B[colB * TK + j])[0];
@@ -248,9 +253,11 @@ __global__ void MatMulKernel_Final(float *A, float *B, float *C,
     for (uint dotIdx = 0; dotIdx < DK; dotIdx++)
     {
 
-      for (uint colT = 0; colT < TK; colT += 4)
-        reinterpret_cast<float4 *>(&colN[colT])[0] = reinterpret_cast<float4 *>(&sB[dotIdx][threadCol * TK + colT])[0];
+      #pragma unroll
+      for (uint colT = 0; colT < TK; colT ++)
+        colN[colT] = sB[dotIdx][threadCol * TK + colT];
 
+      #pragma unroll
       for (uint rowT = 0; rowT < TM; rowT += 4)
         reinterpret_cast<float4 *>(&rowN[rowT])[0] = reinterpret_cast<float4 *>(&sA[dotIdx][threadRow * TM + rowT])[0];
 
@@ -268,11 +275,13 @@ __global__ void MatMulKernel_Final(float *A, float *B, float *C,
 
   C += blockIdx.y * DM * N + blockIdx.x * DM;
 
-  for (uint colT = 0; colT < TK; colT++)
+  #pragma unroll 1
+  for (uint rowT = 0; rowT < TM; rowT++)
   {
-    uint col = threadCol * TK + colT;
-    for (uint rowT = 0; rowT < TM; rowT++)
-      C[(threadRow * TM + rowT) * N + col] = result[rowT][colT];
+    uint row = (threadRow * TM + rowT) * N;
+
+    // NOTE: Hardcoded for TK = 4
+    reinterpret_cast<float4 *>(&C[(row + threadCol * TK)])[0] = reinterpret_cast<float4 *>(&result[rowT][0])[0];
   }
 
 }

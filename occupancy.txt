@@ -1,0 +1,63 @@
+GRID = (64,64)
+BLOCK = (128,1)
+max threads per multiprocessor	= 1536
+U_BLOCKS = 12
+
+
+CUDA runtime shared mem overhead per block	= 1024
+SHEM_PER_BLOCK= 8 * 68 + 8 * 64 + 1024 = 2080
+shared mem per multiprocessor	= 102400
+U_BLOCKS = 50
+
+
+REG_PER_THREAD            = 63
+reg allocation unit size  = 256
+REG_PER_WRAP              = 63 * 32 + 256
+REG_PER_BLOCK = 4 * (63 * 32 + 256)
+UBLOCKS = 7
+
+
+
+Device Name: NVIDIA GeForce RTX 4090
+Compute Capability: 89
+Max Threads per Block: 1024
+Max Threads per MultiProcessor: 1536
+Threads per Wrap: 32
+Max Regs per Block: 65536
+Max Regs per MultiProcessor: 65536
+Max Shared Memory per Block: 49152
+Max Shared Memory per MultiProcessor: 102400
+SM Count: 128
+Max Wrap per MultiProcessor: 48
+
+
+
+Each block calculate 128 x 128 matrix
+
+
+
+
+constexpr uint DM = 128;
+constexpr uint DK = 16;
+constexpr uint TM = DM / DK;
+constexpr uint TK = 8;
+
+each thread calculates 8x8 matrix
+
+
+
+
+each block calculates -> 128*128 elements
+
+each thread calculates at a time -> 32 elements
+
+each warp calculates -> 2048 elements
+
+warp size -> 32
+
+each thread in a warp has to calculate a total of 64 elements
+
+number of warps required 128 * 128 / 2048 = 8
+
+number of threads required 32 * 8 = 256
+
