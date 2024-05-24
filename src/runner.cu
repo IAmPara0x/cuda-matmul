@@ -99,12 +99,12 @@ function<void()> runner(cublasHandle_t handle, MatMulKernel kernel,
     constexpr uint DK = 16;
     constexpr uint TM = DM / DK;
     constexpr uint TK = 4;
-    constexpr uint WN = 2;
-    dim3 blockDim((DM * DK) / TK);
+    constexpr uint WITER = 2;
+    dim3 blockDim((DM * DK) / (TK * WITER));
     dim3 gridDim(CEIL_DIV(N, DM), CEIL_DIV(N, DM));
 
     return ([handle, device, N, blockDim, gridDim]() {
-      MatMulKernel_Final<DM,DK,TM,TK,WN><<<gridDim, blockDim>>>(device.dA, device.dB,
+      MatMulKernel_Final<DM,DK,TM,TK,WITER><<<gridDim, blockDim>>>(device.dA, device.dB,
                                                         device.dC, N);
       // matrixMulDoubleBuffer<32><<<gridDim, blockDim>>>(device.dA, device.dB,
       //                                                   device.dC, N);

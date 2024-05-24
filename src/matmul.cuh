@@ -99,7 +99,6 @@ __global__ void MatMulKernel_1DBlockTiling(float *A, float *B, float *C,
 
 
   A += (blockIdx.y * DM + rowA) * N;
- #include "device_launch_parameters.h"
   B += DM * blockIdx.x;
 
 
@@ -208,7 +207,7 @@ __global__ void MatMulKernel_2DBlockTiling(float *A, float *B, float *C,
 
 
 
-template<const uint DM, const uint DK, const uint TM, const uint TK, const uint WN>
+template<const uint DM, const uint DK, const uint TM, const uint TK, const uint WITER>
 __global__ void MatMulKernel_Final(float *A, float *B, float *C,
                                      uint N) {
 
@@ -220,33 +219,35 @@ __global__ void MatMulKernel_Final(float *A, float *B, float *C,
   __shared__ float sB[DK][DM];
 
 
-  float result[TM][TK] = {0.0f}, colN[TK] = {0.0f}, rowN[TM] = {0.0f};
+  float result[TM][TK * WITER] = {0.0f}, colN[TK] = {0.0f}, rowN[TM] = {0.0f};
 
-  uint colA, rowA, colB, rowB, tx = threadIdx.x;
+  uint colA, rowA, colBAndThreadCol, rowBAndThreadRow, tx = threadIdx.x;
 
   colA = tx % DK;
   rowA = tx / DK;
 
-  colB = tx % (DM / TK);
-  rowB = tx / (DM / TK);
+  colBAndThreadCol = tx % (DM / (TK * WITER));
+  rowBAndThreadRow = tx / (DM / (TK * WITER));
 
-  const int threadCol = tx % (DM / TK);
-  const int threadRow = tx / (DM / TK);
-
-  // const int threadCol = tx % (DM / (TK * WN));
-  // const int threadRow = tx / (DM / (TK * WN));
+  const uint WarpDimN  =  (DM / (TK * WITER)) * TK;
 
   A += (blockIdx.y * DM) * N;
-  B += rowB * N + DM * blockIdx.x;
+  B += rowBAndThreadRow * N + DM * blockIdx.x;
 
   for (uint i = 0; i < N; i += DK) {
 
-    for (uint j = 0; j < TK; j += 1)
-      sA[colA][rowA * TK + j] = A[(rowA * TK + j) * N + colA];
 
+    for (uint WI = 0; WI < WITER; WI++)
+    {
 
-    for (uint j = 0; j < TK; j += 4)
-      reinterpret_cast<float4 *>(&sB[rowB][colB * TK + j])[0] = reinterpret_cast<float4 *>(&B[colB * TK + j])[0];
+      for (uint j = 0; j < TK; j += 1)
+        sA[colA][WI * WarpDimN + rowA * TK + j] = A[(WI * WarpDimN + rowA * TK + j) * N + colA];
+
+      #pragma unroll 1
+      for (uint j = 0; j < TK; j += 4)
+        reinterpret_cast<float4 *>(&sB[rowBAndThreadRow][WI * WarpDimN + colBAndThreadCol * TK + j])[0] = reinterpret_cast<float4 *>(&B[ WI * WarpDimN + colBAndThreadCol * TK + j])[0];
+    }
+
 
     __syncthreads();
 
@@ -254,16 +255,20 @@ __global__ void MatMulKernel_Final(float *A, float *B, float *C,
     {
 
       #pragma unroll
-      for (uint colT = 0; colT < TK; colT ++)
-        colN[colT] = sB[dotIdx][threadCol * TK + colT];
-
-      #pragma unroll
       for (uint rowT = 0; rowT < TM; rowT += 4)
-        reinterpret_cast<float4 *>(&rowN[rowT])[0] = reinterpret_cast<float4 *>(&sA[dotIdx][threadRow * TM + rowT])[0];
+        reinterpret_cast<float4 *>(&rowN[rowT])[0] = reinterpret_cast<float4 *>(&sA[dotIdx][rowBAndThreadRow * TM + rowT])[0];
 
-      for (uint colT = 0; colT < TK; colT++)
-        for (uint rowT = 0; rowT < TM; rowT++)
-          result[rowT][colT] += rowN[rowT] * colN[colT];
+      for (uint WI = 0; WI < WITER; WI++)
+      {
+
+        #pragma unroll
+        for (uint colT = 0; colT < TK; colT ++)
+          colN[colT] = sB[dotIdx][WI * WarpDimN + colBAndThreadCol * TK + colT];
+
+        for (uint colT = 0; colT < TK; colT++)
+          for (uint rowT = 0; rowT < TM; rowT++)
+            result[rowT][WI * TK + colT] += rowN[rowT] * colN[colT];
+      }
     }
 
     __syncthreads();
@@ -278,10 +283,11 @@ __global__ void MatMulKernel_Final(float *A, float *B, float *C,
   #pragma unroll 1
   for (uint rowT = 0; rowT < TM; rowT++)
   {
-    uint row = (threadRow * TM + rowT) * N;
+    uint row = (rowBAndThreadRow * TM + rowT) * N;
 
-    // NOTE: Hardcoded for TK = 4
-    reinterpret_cast<float4 *>(&C[(row + threadCol * TK)])[0] = reinterpret_cast<float4 *>(&result[rowT][0])[0];
+    // NOTE: Hardcoded for TK = 4 and WITER = 2
+    reinterpret_cast<float4 *>(&C[(row + colBAndThreadCol * TK)])[0] = reinterpret_cast<float4 *>(&result[rowT][0])[0];
+    reinterpret_cast<float4 *>(&C[(row + colBAndThreadCol * TK + WarpDimN)])[0] = reinterpret_cast<float4 *>(&result[rowT][4])[0];
   }
 
 }
